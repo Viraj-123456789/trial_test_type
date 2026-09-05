@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Warns (does not block) if backend code changed without state.md / flow.md
+# being touched in the same commit. Enable with:
+#   git config core.hooksPath .githooks
+
+staged=$(git diff --cached --name-only)
+
+code_changed=$(echo "$staged" | grep -E '^backend/src/(routes|services|workers)/' | grep -v '.gitkeep')
+state_changed=$(echo "$staged" | grep -E '^state\.md$')
+flow_changed=$(echo "$staged" | grep -E '^flow\.md$')
+
+if [ -n "$code_changed" ]; then
+  if [ -z "$state_changed" ] || [ -z "$flow_changed" ]; then
+    echo ""
+    echo "⚠️  You're committing changes to routes/services/workers:"
+    echo "$code_changed" | sed 's/^/     /'
+    [ -z "$state_changed" ] && echo "    state.md was NOT updated in this commit."
+    [ -z "$flow_changed" ]  && echo "    flow.md  was NOT updated in this commit."
+    echo "    (Not blocking — just a reminder. Ctrl+C to go update them first.)"
+    echo ""
+  fi
+fi
+
+exit 0

@@ -1,14 +1,15 @@
 # state.md — Current Status Snapshot
 
-**Rewritten, not appended. Last updated: 2026-09-03.**
+**Rewritten, not appended. Last updated: 2026-09-05.**
 
 ## What's done
 - Project scope defined and cut down to MVP (see below).
-- Key tech decisions locked and recorded in `adr/`: Node+Express, PostgreSQL, BullMQ+Redis, Twilio WhatsApp Sandbox, self-built mock storefront over real Shopify dev store.
+- Key tech decisions locked and recorded in `adr/`: Node+Express, PostgreSQL, BullMQ+Redis, Twilio WhatsApp Sandbox, self-built mock storefront over real Shopify dev store, raw-SQL migrations over a migration framework (ADR-0006).
 - Documentation scaffolding created: `structure.md`, `flow.md`, `adr/`, `CLAUDE.md`.
+- **Postgres schema + migrations** (`backend/src/db/migrations/`): `sellers`, `abandoned_carts`, mock `orders`. Custom TS runner (`backend/src/db/migrate.ts`) tracks applied files in `schema_migrations`. Verified against the docker-compose Postgres — migrations apply cleanly and re-running is a no-op.
 
 ## What's in progress
-- Nothing yet — this is the planning/scaffolding phase. No application code has been written.
+- Backend has a `package.json`/`tsconfig.json` now (pg, dotenv, ts-node/typescript). No routes/services/workers/models written yet — next step (#2 below) is the mock storefront.
 
 ## What's deliberately not built (and why)
 - **Multi-store OAuth onboarding** — cut from MVP, doesn't change the core story (webhook → delay → send → confirm).
@@ -18,10 +19,12 @@
 - **Real Shopify integration** — deferred, not rejected. Mock storefront fires Shopify-shaped payloads so this is a config swap later, not a rewrite (see ADR-0005).
 
 ## Known technical debt
-- None yet — nothing built. First debt will likely show up around: Twilio sandbox's join-code / 24h-window / template constraints (see ADR-0004), and idempotency in the worker's "check then send" step (needs a row lock or unique constraint to avoid double-sends on job retry).
+- Twilio sandbox's join-code / 24h-window / template constraints (see ADR-0004) — not yet hit, will matter once whatsappService is built.
+- Idempotency in the worker's "check then send" step: schema supports it (`abandoned_carts.status` CHECK constraint), but the worker itself must use `UPDATE ... WHERE status = 'pending'` (not read-then-write) to avoid double-sends on job retry. Noted in a comment in `0002_create_abandoned_carts.sql` — not yet enforced anywhere since the worker doesn't exist yet.
+- No down-migrations (accepted trade-off, see ADR-0006) — a bad migration needs a fix-forward file, not a rollback.
 
 ## Next up
-1. Postgres schema + migrations (`sellers`, `abandoned_carts`, plus a mock `orders` table).
+1. ~~Postgres schema + migrations~~ ✅ done — `sellers`, `abandoned_carts`, mock `orders`.
 2. Mock storefront: fires a `checkouts/create`-shaped payload on demand.
 3. `POST /webhooks/checkout` route → enqueue BullMQ delayed job.
 4. Worker: check-then-send logic against the mock orders table.

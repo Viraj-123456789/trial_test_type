@@ -50,4 +50,4 @@
 ```
 
 ## Currently working on
-Nothing yet — see `state.md` for next steps. Update this line when work starts on a specific piece.
+Schema/migrations for `sellers`, `abandoned_carts`, `orders` are done (backend/src/db/migrations/), but no routes/services/workers exist yet — every step below is still unbuilt code. Next: mock storefront, then `POST /webhooks/checkout`. See `state.md` for the full list.

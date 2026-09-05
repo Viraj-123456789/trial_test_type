@@ -35,12 +35,40 @@ async function runMigration(filename: string): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+// Rolls back one already-applied migration by running its paired `.down.sql` file.
+// No down-file targeting by name — always the most-recently-applied one, so reverse
+// order naturally drops dependents before what they reference (see ADR-0008).
+async function runDownMigration(filename: string): Promise<void> {
+  const downFilename = filename.replace(/\.sql$/, '.down.sql');
+  const downPath = path.join(MIGRATIONS_DIR, downFilename);
+  if (!fs.existsSync(downPath)) {
+    throw new Error(`no down migration found for ${filename} (expected ${downFilename})`);
+  }
+
+  const sql = fs.readFileSync(downPath, 'utf8');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(sql);
+    await client.query('DELETE FROM schema_migrations WHERE filename = $1', [filename]);
+    await client.query('COMMIT');
+    console.log(`rolled back ${filename}`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw new Error(`rollback of ${filename} failed: ${(err as Error).message}`);
+  } finally {
+    client.release();
+  }
+}
+
+async function up(): Promise<void> {
   await ensureMigrationsTable();
   const applied = await appliedMigrations();
+  // .down.sql files live alongside their .sql counterpart in the same directory —
+  // exclude them here or the up-runner would try to "apply" them too.
   const files = fs
     .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
+    .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
     .sort();
 
   const pending = files.filter((f) => !applied.has(f));
@@ -52,6 +80,38 @@ async function main(): Promise<void> {
   for (const file of pending) {
     await runMigration(file);
   }
+}
+
+async function down(steps: number): Promise<void> {
+  await ensureMigrationsTable();
+  const { rows } = await pool.query<{ filename: string }>(
+    'SELECT filename FROM schema_migrations ORDER BY applied_at DESC LIMIT $1',
+    [steps],
+  );
+
+  if (rows.length === 0) {
+    console.log('no applied migrations to roll back');
+    return;
+  }
+
+  for (const row of rows) {
+    await runDownMigration(row.filename);
+  }
+}
+
+async function main(): Promise<void> {
+  const [, , mode, stepsArg] = process.argv;
+
+  if (mode === 'down') {
+    const steps = stepsArg ? Number(stepsArg) : 1;
+    if (!Number.isInteger(steps) || steps < 1) {
+      throw new Error(`invalid step count "${stepsArg}" — expected a positive integer`);
+    }
+    await down(steps);
+    return;
+  }
+
+  await up();
 }
 
 main()

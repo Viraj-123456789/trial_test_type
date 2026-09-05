@@ -1,4 +1,4 @@
-export type CartStatus = 'pending' | 'sent' | 'recovered' | 'expired' | 'failed';
+export type CartStatus = 'pending' | 'sending' | 'sent' | 'recovered' | 'expired' | 'failed';
 
 export interface AbandonedCart {
   id: number;
@@ -13,6 +13,9 @@ export interface AbandonedCart {
   checkoutUrl: string;
   lineItems: unknown;
   status: CartStatus;
+  // set only when the pending -> sending claim happens (see ADR-0009) — used by the
+  // reconciliation sweep to detect a cart stuck mid-send, independent of updated_at.
+  sendingAt: Date | null;
   sentAt: Date | null;
   recoveredAt: Date | null;
   createdAt: Date;
@@ -31,6 +34,7 @@ interface AbandonedCartRow {
   checkout_url: string;
   line_items: unknown;
   status: CartStatus;
+  sending_at: Date | null;
   sent_at: Date | null;
   recovered_at: Date | null;
   created_at: Date;
@@ -50,6 +54,7 @@ export function mapAbandonedCartRow(row: AbandonedCartRow): AbandonedCart {
     checkoutUrl: row.checkout_url,
     lineItems: row.line_items,
     status: row.status,
+    sendingAt: row.sending_at,
     sentAt: row.sent_at,
     recoveredAt: row.recovered_at,
     createdAt: row.created_at,

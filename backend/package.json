@@ -5,6 +5,7 @@
   "description": "Express API + BullMQ worker for WhatsApp cart recovery",
   "scripts": {
     "migrate": "ts-node src/db/migrate.ts",
+    "migrate:down": "ts-node src/db/migrate.ts down",
     "seed": "ts-node src/db/seed.ts",
     "dev": "ts-node src/server.ts",
     "worker": "ts-node src/worker.ts",
@@ -25,5 +26,8 @@
     "@types/pg": "^8.11.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }

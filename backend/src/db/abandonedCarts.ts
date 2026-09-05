@@ -38,14 +38,14 @@ export async function insertAbandonedCartIfNew(cart: NewAbandonedCart): Promise<
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
 }
 
-// Corrects an optimistic `sent` claim after the WhatsApp API call actually fails —
-// the cart was claimed (see markCartSentIfPending) before the send was attempted,
-// so this is the one legitimate sent -> failed transition, not a new race to guard
-// against a retry (there's no retry path back from `failed` in this MVP).
-export async function markCartFailedIfSent(id: number): Promise<AbandonedCart | null> {
+// Corrects the `sending` claim after the WhatsApp API call actually fails — the
+// cart was claimed (see markCartSendingIfPending) before the send was attempted, so
+// this is a legitimate sending -> failed transition, not a new race to guard against
+// a retry (there's no retry path back from `failed` in this MVP).
+export async function markCartFailedIfSending(id: number): Promise<AbandonedCart | null> {
   const { rows } = await pool.query(
     `UPDATE abandoned_carts SET status = 'failed', updated_at = now()
-     WHERE id = $1 AND status = 'sent'
+     WHERE id = $1 AND status = 'sending'
      RETURNING *`,
     [id],
   );
@@ -84,16 +84,45 @@ export async function markCartRecoveredIfSent(sellerId: number, checkoutId: stri
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
 }
 
-// Atomically transitions pending -> sent. This IS the claim: run it before calling
+// Atomically transitions pending -> sending. This IS the claim: run it before calling
 // the WhatsApp API, not after, so a retried/duplicate job invocation sees status !=
-// 'pending' and skips sending instead of double-sending (see known technical debt in
-// state.md and the comment in migration 0002).
-export async function markCartSentIfPending(id: number): Promise<AbandonedCart | null> {
+// 'pending' and skips sending instead of double-sending. `sending` (rather than
+// jumping straight to `sent`) lets a crash between this claim and the Twilio call
+// resolving be detected and reconciled instead of silently mislabeled `sent` forever
+// — see ADR-0009.
+export async function markCartSendingIfPending(id: number): Promise<AbandonedCart | null> {
   const { rows } = await pool.query(
-    `UPDATE abandoned_carts SET status = 'sent', sent_at = now(), updated_at = now()
+    `UPDATE abandoned_carts SET status = 'sending', sending_at = now(), updated_at = now()
      WHERE id = $1 AND status = 'pending'
      RETURNING *`,
     [id],
   );
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
+// Confirms a successful send: sending -> sent. sent_at is only ever set here (not at
+// the claim step), so it means "confirmed delivered", not "attempted".
+export async function markCartSentIfSending(id: number): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'sent', sent_at = now(), updated_at = now()
+     WHERE id = $1 AND status = 'sending'
+     RETURNING *`,
+    [id],
+  );
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
+// Reconciliation sweep: any cart claimed (pending -> sending) more than
+// `thresholdMinutes` ago and never resolved to `sent`/`failed` is assumed to have
+// been orphaned by a crashed/killed worker process, and is marked `failed` so it's
+// visible for manual follow-up rather than silently stuck. See ADR-0009 for the
+// accepted trade-off (a legitimately slow-but-alive send outliving the threshold).
+export async function reapStaleSendingCartsAsFailed(thresholdMinutes: number): Promise<AbandonedCart[]> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'failed', updated_at = now()
+     WHERE status = 'sending' AND sending_at < now() - make_interval(mins => $1)
+     RETURNING *`,
+    [thresholdMinutes],
+  );
+  return rows.map(mapAbandonedCartRow);
 }

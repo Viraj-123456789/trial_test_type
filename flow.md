@@ -32,15 +32,24 @@
         ├─ if order exists → cartService.markRecovered() → status: recovered, STOP (no message sent)  ✅
         │
         └─ if no order →
-              [✅] cartService.markSent()  atomically claims pending → sent *before* sending —
-              │     this ordering (not send-then-mark) is what makes a retried/duplicate job safe
+              [✅] cartService.markSending()  atomically claims pending → sending *before* sending —
+              │     this ordering (not send-then-mark) is what makes a retried/duplicate job safe.
+              │     `sending` (not straight to `sent`) is what makes a crash between this claim and
+              │     the Twilio call resolving detectable instead of silently mislabeled forever (ADR-0009)
               ▼
               [✅] whatsappService.sendRecoveryMessage()  backend/src/services/whatsappService.ts
                       │  fills template with {name}/{product}/{cart_link}, calls Twilio
-                      │  (client built lazily — missing credentials fail the send, not app startup)
+                      │  (client built lazily — missing credentials fail the send, not app startup;
+                      │  explicit 20s request timeout bounds a hung call, see ADR-0009)
                       ▼
-              on failure → cartService.markFailed()  atomic sent -> failed (corrects the claim)  ✅
+              on success → cartService.markSentConfirmed()  sending -> sent (sent_at set here)  ✅
+              on failure → cartService.markFailed()          sending -> failed (corrects the claim) ✅
 ```
+
+A reconciliation sweep (`cartService.reapStaleSending`, `backend/src/worker.ts`, at startup + every 60s)
+bulk-corrects any cart stuck `sending` past `RECOVERY_SENDING_TIMEOUT_MINUTES` to `failed` — closes the
+crash-window gap where a worker process death between the claim and the Twilio call resolving used to
+leave a cart permanently mislabeled `sent`. See ADR-0009 for the one accepted residual edge case.
 
 Real Twilio send verified only for its failure paths here (missing credentials, non-E.164 phone) — no
 Sandbox account/credentials available in this dev environment to verify an actual successful delivery.
@@ -71,5 +80,7 @@ Sandbox account/credentials available in this dev environment to verify an actua
 Both flows are fully wired end to end. Flow 1's WhatsApp send and Flow 2's `sent → recovered`
 transition were each verified against arranged preconditions (no real Twilio Sandbox account exists
 in this dev environment, so a genuine successful send/end-to-end recovery hasn't been observed).
+A bug-fix pass closed the crash-window gap in Flow 1's send step (`sending` intermediate status +
+reconciliation sweep, ADR-0009) and added down-migration support (ADR-0008) — see state.md for details.
 Nothing left on the MVP call-graph — remaining work is the dashboard (#7 in state.md), which is a
 separate `frontend/` app, not part of these two flows.

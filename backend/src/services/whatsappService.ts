@@ -21,6 +21,12 @@ function buildMessageText(cart: AbandonedCart, seller: Seller): string {
   return `Hi ${name}, you left ${product} in your cart! Use code ${seller.discountCode} for ${seller.discountPercent}% off: ${cart.checkoutUrl}`;
 }
 
+// Bounds how long a single Twilio call can hang. This is the direct fix for "call
+// never resolves without the process crashing" — the reconciliation sweep (see
+// ADR-0009, cartService.reapStaleSending) is defense-in-depth on top of this, not
+// the primary mechanism, and its own threshold is chosen well above this value.
+const TWILIO_REQUEST_TIMEOUT_MS = 20_000;
+
 let client: Twilio | null = null;
 
 // Constructed lazily (not at module load) so the rest of the app — routes, the
@@ -33,7 +39,7 @@ function getClient(): Twilio {
     );
   }
   if (!client) {
-    client = twilio(env.twilioAccountSid, env.twilioAuthToken);
+    client = twilio(env.twilioAccountSid, env.twilioAuthToken, { timeout: TWILIO_REQUEST_TIMEOUT_MS });
   }
   return client;
 }

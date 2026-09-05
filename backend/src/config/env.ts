@@ -25,4 +25,9 @@ export const env = {
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? '',
   twilioWhatsappFrom: process.env.TWILIO_WHATSAPP_FROM ?? '',
+  // How long a cart can sit in 'sending' before the reconciliation sweep assumes the
+  // worker crashed mid-send and marks it 'failed'. Deliberately well above realistic
+  // Twilio latency (the explicit client timeout in whatsappService.ts bounds that) —
+  // see ADR-0009.
+  recoverySendingTimeoutMinutes: Number(process.env.RECOVERY_SENDING_TIMEOUT_MINUTES ?? 5),
 };

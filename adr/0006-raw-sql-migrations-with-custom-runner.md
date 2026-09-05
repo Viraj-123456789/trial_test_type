@@ -12,5 +12,5 @@ Plain numbered `.sql` files in `backend/src/db/migrations/`, applied in order by
 
 ## Consequences
 - Schema changes are plain SQL, readable without knowing a library's DSL.
-- No automatic rollback — a bad migration must be fixed forward with a new migration file, not reversed. Acceptable while there's no production data.
+- ~~No automatic rollback — a bad migration must be fixed forward with a new migration file, not reversed. Acceptable while there's no production data.~~ **Amended by ADR-0008**: down-migration support was added after all — see that ADR for why and what it does/doesn't cover. The rest of this ADR's reasoning (raw SQL + custom runner over a framework) still stands.
 - If schema churn increases post-MVP, revisit in favor of `node-pg-migrate` rather than growing the custom runner.

@@ -1,10 +1,12 @@
 import { findSellerByShopDomain } from '../db/sellers';
 import {
   insertAbandonedCartIfNew,
-  markCartFailedIfSent,
+  markCartFailedIfSending,
   markCartRecoveredIfPending,
   markCartRecoveredIfSent,
-  markCartSentIfPending,
+  markCartSendingIfPending,
+  markCartSentIfSending,
+  reapStaleSendingCartsAsFailed,
 } from '../db/abandonedCarts';
 import { Seller } from '../models/seller';
 import { AbandonedCart } from '../models/abandonedCart';
@@ -75,15 +77,25 @@ export async function markRecovered(cartId: number): Promise<AbandonedCart | nul
   return markCartRecoveredIfPending(cartId);
 }
 
-export async function markSent(cartId: number): Promise<AbandonedCart | null> {
-  return markCartSentIfPending(cartId);
+export async function markSending(cartId: number): Promise<AbandonedCart | null> {
+  return markCartSendingIfPending(cartId);
 }
 
-// Corrects a cart's status when the WhatsApp send fails after markSent() already
-// claimed it (see markCartFailedIfSent for why this is a legitimate correction, not
-// a race to guard against).
+// Confirms a successful send — sending -> sent.
+export async function markSentConfirmed(cartId: number): Promise<AbandonedCart | null> {
+  return markCartSentIfSending(cartId);
+}
+
+// Corrects a cart's status when the WhatsApp send fails after markSending() already
+// claimed it (see markCartFailedIfSending for why this is a legitimate correction,
+// not a race to guard against).
 export async function markFailed(cartId: number): Promise<AbandonedCart | null> {
-  return markCartFailedIfSent(cartId);
+  return markCartFailedIfSending(cartId);
+}
+
+// Reconciliation sweep — see ADR-0009. Returns the carts it reaped, for logging.
+export async function reapStaleSending(thresholdMinutes: number): Promise<AbandonedCart[]> {
+  return reapStaleSendingCartsAsFailed(thresholdMinutes);
 }
 
 // Flow 2: an orders/create webhook arrived. Only transitions a `sent` cart to

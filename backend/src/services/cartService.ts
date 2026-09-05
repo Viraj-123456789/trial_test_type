@@ -3,6 +3,7 @@ import {
   insertAbandonedCartIfNew,
   markCartFailedIfSent,
   markCartRecoveredIfPending,
+  markCartRecoveredIfSent,
   markCartSentIfPending,
 } from '../db/abandonedCarts';
 import { Seller } from '../models/seller';
@@ -83,4 +84,13 @@ export async function markSent(cartId: number): Promise<AbandonedCart | null> {
 // a race to guard against).
 export async function markFailed(cartId: number): Promise<AbandonedCart | null> {
   return markCartFailedIfSent(cartId);
+}
+
+// Flow 2: an orders/create webhook arrived. Only transitions a `sent` cart to
+// `recovered` — an order for a still-`pending` cart is left alone here on purpose,
+// since the worker's own check-then-send already handles that case (see
+// markCartRecoveredIfSent's comment). Returns null if there's no matching `sent`
+// cart for this checkout (not a recovery, or already handled).
+export async function matchOrderToCart(sellerId: number, checkoutId: string): Promise<AbandonedCart | null> {
+  return markCartRecoveredIfSent(sellerId, checkoutId);
 }

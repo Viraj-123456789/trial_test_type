@@ -48,18 +48,28 @@ Sandbox account/credentials available in this dev environment to verify an actua
 ## Flow 2: Order created → recovery confirmed
 
 ```
-[ ] Shopify/mock fires `orders/create` webhook
+[✅] Shopify/mock fires `orders/create` webhook   mock-storefront/src/index.ts (POST /simulate/order)
         │
         ▼
-[ ] POST /webhooks/order                 backend/src/routes/webhooks.js
-        │
+[✅] POST /webhooks/order                 backend/src/routes/webhooks.ts
+        │  verifies X-Shopify-Hmac-Sha256, looks up seller by X-Shopify-Shop-Domain,
+        │  validates payload shape — same shape as /checkout
         ▼
-[ ] cartService.matchOrderToCart()       backend/src/services/cartService.js
-        │  looks up abandoned_carts by checkout id, status = sent
+[✅] orderService.recordOrder()           backend/src/services/orderService.ts
+        │  inserts into `orders`; ON CONFLICT (seller_id, checkout_id) DO NOTHING →
+        │  duplicate delivery, no-op (but the match below still runs — see next line)
         ▼
-        if match found → status: recovered   (powers the revenue-recovered stat)
-        if no match     → ignore (not a recovered-cart order)
+[✅] cartService.matchOrderToCart()       backend/src/services/cartService.ts
+        │  looks up abandoned_carts by (seller_id, checkout_id), status = sent
+        ▼
+        if match found → status: recovered   (powers the revenue-recovered stat)  ✅
+        if no match     → ignore — either not a recovery, or the cart is still `pending`
+                           (that case is the worker's job, see Flow 1, not this route's)
 ```
 
 ## Currently working on
-Flow 1 is fully wired end to end (webhook → delay → check → send-or-recover), including a real Twilio WhatsApp send (failure paths verified live; success path not verified — no Sandbox credentials here). Flow 2 (`POST /webhooks/order`) still doesn't exist. Next: build it (#6). See `state.md` for the full list.
+Both flows are fully wired end to end. Flow 1's WhatsApp send and Flow 2's `sent → recovered`
+transition were each verified against arranged preconditions (no real Twilio Sandbox account exists
+in this dev environment, so a genuine successful send/end-to-end recovery hasn't been observed).
+Nothing left on the MVP call-graph — remaining work is the dashboard (#7 in state.md), which is a
+separate `frontend/` app, not part of these two flows.

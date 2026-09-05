@@ -69,6 +69,21 @@ export async function markCartRecoveredIfPending(id: number): Promise<AbandonedC
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
 }
 
+// Atomically transitions sent -> recovered, looked up by (seller_id, checkout_id)
+// since the order webhook only knows the checkout id, not our internal cart id.
+// Deliberately does NOT match a `pending` cart — that's the worker's own job (an
+// order that arrives before the delay elapses is caught there instead, see
+// recoveryWorker.ts), so this can't race with it over the same status column.
+export async function markCartRecoveredIfSent(sellerId: number, checkoutId: string): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'recovered', recovered_at = now(), updated_at = now()
+     WHERE seller_id = $1 AND checkout_id = $2 AND status = 'sent'
+     RETURNING *`,
+    [sellerId, checkoutId],
+  );
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
 // Atomically transitions pending -> sent. This IS the claim: run it before calling
 // the WhatsApp API, not after, so a retried/duplicate job invocation sees status !=
 // 'pending' and skips sending instead of double-sending (see known technical debt in

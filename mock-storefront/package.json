@@ -1,0 +1,21 @@
+{
+  "name": "wcr-mock-storefront",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fires Shopify-shaped checkouts/create and orders/create webhooks on demand (see ADR-0005)",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.9.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

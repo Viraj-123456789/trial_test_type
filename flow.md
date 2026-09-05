@@ -50,4 +50,4 @@
 ```
 
 ## Currently working on
-Schema/migrations for `sellers`, `abandoned_carts`, `orders` are done (backend/src/db/migrations/), but no routes/services/workers exist yet — every step below is still unbuilt code. Next: mock storefront, then `POST /webhooks/checkout`. See `state.md` for the full list.
+Schema/migrations (backend/src/db/migrations/) and the mock storefront (mock-storefront/, fires signed `checkouts/create`/`orders/create` webhooks on demand) are both done. No backend routes/services/workers exist yet — every checkbox below is still unbuilt code. Next: `POST /webhooks/checkout`. See `state.md` for the full list.

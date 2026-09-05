@@ -38,6 +38,20 @@ export async function insertAbandonedCartIfNew(cart: NewAbandonedCart): Promise<
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
 }
 
+// Corrects an optimistic `sent` claim after the WhatsApp API call actually fails —
+// the cart was claimed (see markCartSentIfPending) before the send was attempted,
+// so this is the one legitimate sent -> failed transition, not a new race to guard
+// against a retry (there's no retry path back from `failed` in this MVP).
+export async function markCartFailedIfSent(id: number): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'failed', updated_at = now()
+     WHERE id = $1 AND status = 'sent'
+     RETURNING *`,
+    [id],
+  );
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
 export async function findCartById(id: number): Promise<AbandonedCart | null> {
   const { rows } = await pool.query('SELECT * FROM abandoned_carts WHERE id = $1', [id]);
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;

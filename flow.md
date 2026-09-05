@@ -35,12 +35,15 @@
               [✅] cartService.markSent()  atomically claims pending → sent *before* sending —
               │     this ordering (not send-then-mark) is what makes a retried/duplicate job safe
               ▼
-              [🚧] whatsappService.sendRecoveryMessage()  backend/src/services/whatsappService.ts
-                      │  STUB — logs the filled {name}/{product}/{cart_link} template, does not
-                      │  call Twilio yet. Real integration is next up (#5).
+              [✅] whatsappService.sendRecoveryMessage()  backend/src/services/whatsappService.ts
+                      │  fills template with {name}/{product}/{cart_link}, calls Twilio
+                      │  (client built lazily — missing credentials fail the send, not app startup)
                       ▼
-                   (nothing further — status is already `sent` from the claim step above)
+              on failure → cartService.markFailed()  atomic sent -> failed (corrects the claim)  ✅
 ```
+
+Real Twilio send verified only for its failure paths here (missing credentials, non-E.164 phone) — no
+Sandbox account/credentials available in this dev environment to verify an actual successful delivery.
 
 ## Flow 2: Order created → recovery confirmed
 
@@ -59,4 +62,4 @@
 ```
 
 ## Currently working on
-Flow 1 is fully wired end to end (webhook → delay → check → send-or-recover), with WhatsApp sending stubbed (logs instead of calling Twilio). Flow 2 (`POST /webhooks/order`) still doesn't exist. Next: replace the whatsappService stub with a real Twilio WhatsApp Sandbox call (#5), then build `POST /webhooks/order` (#6). See `state.md` for the full list.
+Flow 1 is fully wired end to end (webhook → delay → check → send-or-recover), including a real Twilio WhatsApp send (failure paths verified live; success path not verified — no Sandbox credentials here). Flow 2 (`POST /webhooks/order`) still doesn't exist. Next: build it (#6). See `state.md` for the full list.

@@ -1,6 +1,7 @@
 import { findSellerByShopDomain } from '../db/sellers';
 import {
   insertAbandonedCartIfNew,
+  markCartFailedIfSent,
   markCartRecoveredIfPending,
   markCartSentIfPending,
 } from '../db/abandonedCarts';
@@ -75,4 +76,11 @@ export async function markRecovered(cartId: number): Promise<AbandonedCart | nul
 
 export async function markSent(cartId: number): Promise<AbandonedCart | null> {
   return markCartSentIfPending(cartId);
+}
+
+// Corrects a cart's status when the WhatsApp send fails after markSent() already
+// claimed it (see markCartFailedIfSent for why this is a legitimate correction, not
+// a race to guard against).
+export async function markFailed(cartId: number): Promise<AbandonedCart | null> {
+  return markCartFailedIfSent(cartId);
 }

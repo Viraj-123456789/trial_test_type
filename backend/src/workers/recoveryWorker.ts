@@ -5,7 +5,7 @@ import { RECOVERY_QUEUE_NAME, RecoveryJobData } from './recoveryQueue';
 import { findCartById } from '../db/abandonedCarts';
 import { findSellerById } from '../db/sellers';
 import { checkIfOrdered } from '../services/orderService';
-import { markRecovered, markSent } from '../services/cartService';
+import { markFailed, markRecovered, markSent } from '../services/cartService';
 import { sendRecoveryMessage } from '../services/whatsappService';
 
 const connection = new IORedis(env.redisUrl, { maxRetriesPerRequest: null });
@@ -41,7 +41,11 @@ async function processRecoveryJob(job: Job<RecoveryJobData>): Promise<void> {
     return;
   }
 
-  await sendRecoveryMessage(claimed, seller);
+  const result = await sendRecoveryMessage(claimed, seller);
+  if (!result.ok) {
+    await markFailed(cart.id);
+    console.error(`recoveryWorker: send failed for cart ${cart.id}, marked failed: ${result.error}`);
+  }
 }
 
 export const recoveryWorker = new Worker<RecoveryJobData>(RECOVERY_QUEUE_NAME, processRecoveryJob, { connection });

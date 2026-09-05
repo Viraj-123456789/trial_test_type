@@ -19,4 +19,10 @@ export const env = {
   shopifyWebhookSecret: required('MOCK_STOREFRONT_WEBHOOK_SECRET'),
   mockShopDomain: process.env.MOCK_SHOP_DOMAIN ?? 'demo-store.myshopify.com',
   defaultDelayMinutes: Number(process.env.DEFAULT_DELAY_MINUTES ?? 1),
+  // Optional, not required(): the rest of the app (routes, worker's check-then-send
+  // logic) must keep working before a Twilio Sandbox account exists. whatsappService
+  // fails loudly, but only at the point of actually sending — see ADR-0004.
+  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+  twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+  twilioWhatsappFrom: process.env.TWILIO_WHATSAPP_FROM ?? '',
 };

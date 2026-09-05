@@ -21,19 +21,25 @@
         ▼
         ⋯ time passes ⋯
         ▼
-[ ] recoveryWorker processor fires       backend/src/workers/recoveryWorker.ts (not yet built — jobs
-        │                                 land in Redis but nothing consumes RECOVERY_QUEUE_NAME yet)
+[✅] recoveryWorker processor fires       backend/src/workers/recoveryWorker.ts
+        │  run as its own process: `npm run worker` → backend/src/worker.ts (ADR-0001)
+        │  short-circuits if cart.status !== 'pending' (already handled — retry/duplicate job)
         │
-        ├─[ ] orderService.checkIfOrdered(checkoutId)   backend/src/services/orderService.js
-        │        queries mock/Shopify orders for this checkout id
+        ├─[✅] orderService.checkIfOrdered(sellerId, checkoutId)   backend/src/services/orderService.ts
+        │        queries mock orders for this seller+checkout id (seller-scoped — checkout ids
+        │        are only unique per seller, see the DB unique constraint)
         │
-        ├─ if order exists → cartService.markRecovered() → status: recovered, STOP (no message sent)
+        ├─ if order exists → cartService.markRecovered() → status: recovered, STOP (no message sent)  ✅
         │
         └─ if no order →
-              [ ] whatsappService.sendRecoveryMessage()  backend/src/services/whatsappService.js
-                      │  fills template with {name}/{product}/{cart_link}, calls Twilio
+              [✅] cartService.markSent()  atomically claims pending → sent *before* sending —
+              │     this ordering (not send-then-mark) is what makes a retried/duplicate job safe
+              ▼
+              [🚧] whatsappService.sendRecoveryMessage()  backend/src/services/whatsappService.ts
+                      │  STUB — logs the filled {name}/{product}/{cart_link} template, does not
+                      │  call Twilio yet. Real integration is next up (#5).
                       ▼
-              [ ] cartService.markSent()   → status: sent
+                   (nothing further — status is already `sent` from the claim step above)
 ```
 
 ## Flow 2: Order created → recovery confirmed
@@ -53,4 +59,4 @@
 ```
 
 ## Currently working on
-Flow 1 is wired up through "job enqueued" (schema, mock storefront, `POST /webhooks/checkout`, cartService, recoveryQueue producer). Flow 2 (`POST /webhooks/order`) and the recovery worker/processor (Flow 1's second half) are still unbuilt. Next: the worker that consumes `RECOVERY_QUEUE_NAME` jobs. See `state.md` for the full list.
+Flow 1 is fully wired end to end (webhook → delay → check → send-or-recover), with WhatsApp sending stubbed (logs instead of calling Twilio). Flow 2 (`POST /webhooks/order`) still doesn't exist. Next: replace the whatsappService stub with a real Twilio WhatsApp Sandbox call (#5), then build `POST /webhooks/order` (#6). See `state.md` for the full list.

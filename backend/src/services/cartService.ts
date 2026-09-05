@@ -1,5 +1,9 @@
 import { findSellerByShopDomain } from '../db/sellers';
-import { insertAbandonedCartIfNew } from '../db/abandonedCarts';
+import {
+  insertAbandonedCartIfNew,
+  markCartRecoveredIfPending,
+  markCartSentIfPending,
+} from '../db/abandonedCarts';
 import { Seller } from '../models/seller';
 import { AbandonedCart } from '../models/abandonedCart';
 
@@ -60,4 +64,15 @@ export async function recordAbandonedCart(
   });
 
   return { seller, cart };
+}
+
+// Both return null if the cart wasn't (or no longer) pending — see the comments on
+// the underlying db functions for why that's a normal, expected no-op rather than an
+// error (concurrent/retried job, or a race with the other transition path).
+export async function markRecovered(cartId: number): Promise<AbandonedCart | null> {
+  return markCartRecoveredIfPending(cartId);
+}
+
+export async function markSent(cartId: number): Promise<AbandonedCart | null> {
+  return markCartSentIfPending(cartId);
 }

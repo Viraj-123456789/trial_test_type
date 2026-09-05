@@ -37,3 +37,34 @@ export async function insertAbandonedCartIfNew(cart: NewAbandonedCart): Promise<
   );
   return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
 }
+
+export async function findCartById(id: number): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query('SELECT * FROM abandoned_carts WHERE id = $1', [id]);
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
+// Atomically transitions pending -> recovered. Returns null if the cart was not (or
+// no longer) pending — e.g. already sent, or already recovered by a concurrent run.
+export async function markCartRecoveredIfPending(id: number): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'recovered', recovered_at = now(), updated_at = now()
+     WHERE id = $1 AND status = 'pending'
+     RETURNING *`,
+    [id],
+  );
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
+
+// Atomically transitions pending -> sent. This IS the claim: run it before calling
+// the WhatsApp API, not after, so a retried/duplicate job invocation sees status !=
+// 'pending' and skips sending instead of double-sending (see known technical debt in
+// state.md and the comment in migration 0002).
+export async function markCartSentIfPending(id: number): Promise<AbandonedCart | null> {
+  const { rows } = await pool.query(
+    `UPDATE abandoned_carts SET status = 'sent', sent_at = now(), updated_at = now()
+     WHERE id = $1 AND status = 'pending'
+     RETURNING *`,
+    [id],
+  );
+  return rows[0] ? mapAbandonedCartRow(rows[0]) : null;
+}
